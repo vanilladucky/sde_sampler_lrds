@@ -2,7 +2,7 @@ defaults:
   - setup
   - _self_
   - solver: dis
-  - target: dw_shift
+  - target: two_modes
 
 # General config
 seed: 1

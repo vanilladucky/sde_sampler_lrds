@@ -5,6 +5,7 @@ import math
 from functools import partial
 from pathlib import Path
 from typing import Callable
+from tqdm import trange
 
 import torch
 import torchquad
@@ -19,6 +20,8 @@ DATA_DIR = Path(__file__).parents[2] / "data"
 
 
 class Distribution(torch.nn.Module):
+    """Base class for probability distributions."""
+
     def __init__(
         self,
         dim: int,
@@ -38,6 +41,10 @@ class Distribution(torch.nn.Module):
         self.register_buffer("stddevs", None, persistent=False)
         self.expectations = {}
 
+    def has_entropy(self):
+        """Informs if the entropy of the mode weights is computable."""
+        return False
+
     def set_domain(self, d: torch.Tensor | float | None = None):
         if d is not None:
             if not isinstance(d, torch.Tensor):
@@ -51,15 +58,19 @@ class Distribution(torch.nn.Module):
             assert d.shape == (self.dim, 2)
         self.register_buffer("domain", d, persistent=False)
 
-    def compute_stats_sampling(self):
+    def compute_stats_sampling(self, return_samples=False):
+        """Computes various reference expectation values based on Monte Carlo estimation with true samples."""
         samples = self.sample((self.n_reference_samples,))
         for name, fn in EXPECTATION_FNS.items():
             if name not in self.expectations:
                 self.expectations[name] = fn(samples).mean().item()
         if self.stddevs is None:
             self.stddevs = samples.std(dim=0)
+        if return_samples:
+            return samples
 
     def compute_stats_integration(self):
+        """Computes various reference expectation values based on exact integration."""
         integrate = partial(
             torchquad.Boole().integrate,
             dim=self.dim,
@@ -86,6 +97,7 @@ class Distribution(torch.nn.Module):
 
     @torch.no_grad()
     def compute_stats(self):
+        """Computes various reference expectation values to assess the statistical estimation"""
         if hasattr(self, "sample") and self.n_reference_samples is not None:
             self.compute_stats_sampling()
 
@@ -114,20 +126,25 @@ class Distribution(torch.nn.Module):
         self._initialize_distr()
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluates the log-likelihood of the distribution at x"""
         if self.log_norm_const is None:
             raise NotImplementedError
         return self.unnorm_log_prob(x) - self.log_norm_const
 
     def pdf(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluates the probability density function of the distribution at x"""
         return self.log_prob(x).exp()
 
     def unnorm_log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluates the unnormalized log-likelihood of the distribution at x"""
         raise NotImplementedError
 
     def unnorm_pdf(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluates the unnormalized probability density function of the distribution at x"""
         return self.unnorm_log_prob(x).exp()
 
     def score(self, x: torch.Tensor, create_graph=False) -> torch.Tensor:
+        """Evaluates the score of the distribution at x by differentiating the log-likelihood."""
         grad = x.requires_grad
         x.requires_grad_(True)
         with torch.set_grad_enabled(True):
@@ -159,24 +176,36 @@ class Distribution(torch.nn.Module):
 
 
 def sample_uniform(domain: torch.Tensor, batchsize: int = 1) -> torch.Tensor:
+    """Samples uniformly batchsize samples on the target domain."""
     dim = domain.shape[0]
     diam = domain[:, 1] - domain[:, 0]
     rand = torch.rand(batchsize, dim, device=domain.device)
     return domain[:, 0] + rand * diam
 
 
-def rejection_sampling(
-    shape: tuple, proposal: Distribution, target: Distribution, scaling: float
-) -> torch.Tensor:
-    n_samples = math.prod(shape)
-    samples = proposal.sample((n_samples * math.ceil(scaling) * 10,))
-    unif = torch.rand(samples.shape[0], 1, device=samples.device)
-    unif *= scaling * proposal.pdf(samples)
-    accept = unif < target.pdf(samples)
-    samples = samples[accept]
-    if samples.shape[0] >= n_samples:
-        return samples[:n_samples].reshape(*shape, -1)
+class WrapperDistrNN(Distribution):
+    """Base class for multi-level Energy-based models."""
+
+    def __init__(self, dim, net, t):
+        super().__init__(dim=dim, log_norm_const=0.0)
+        self.net = net
+        self.t = t
+
+    def unnorm_log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluates the unnormalized probability density function of the distribution at (t,x)"""
+        return self.net.unnorm_log_prob(
+            self.t * torch.ones((x.shape[0], 1), device=x.device), x
+        )
+
+
+def run_gdflow(U, grad_U, x_, n_steps, dt, verbose=False, verbose_freq=100):
+    x = x_.clone()
+    if verbose:
+        r = trange(n_steps)
     else:
-        new_shape = (n_samples - samples.shape[0],)
-        new_samples = rejection_sampling(new_shape, proposal, target, scaling)
-        return torch.concat([samples.reshape(*shape, -1), new_samples])
+        r = range(n_steps)
+    for t in r:
+        x -= dt * grad_U(x)
+        if verbose and (t % verbose_freq) == 0:
+            r.set_postfix(u='{:.3e}'.format(U(x).sum().item()))
+    return x.detach()

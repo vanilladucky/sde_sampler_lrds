@@ -1,0 +1,4 @@
+_target_: sde_sampler.distr.checkerboard.Checkerboard
+dim: 2
+width: 4
+unequilibrated: True

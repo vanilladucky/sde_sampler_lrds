@@ -1,0 +1,6 @@
+_target_: sde_sampler.distr.logistic_regression.LogisticRegression
+dim: 31
+data_type: 'cancer'
+intercept_mean: 31.
+intercept_scale: 2.
+weight_scale: 3.75

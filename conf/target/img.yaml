@@ -1,3 +1,0 @@
-_target_: sde_sampler.distr.img.Img
-dim: 2
-n_reference_samples: 1000000

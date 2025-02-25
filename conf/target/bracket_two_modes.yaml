@@ -1,0 +1,4 @@
+_target_: sde_sampler.distr.gauss.BracketTwoModes
+dim: 5
+a: 1.0
+n_reference_samples: 16384

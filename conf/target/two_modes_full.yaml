@@ -1,0 +1,8 @@
+_target_: sde_sampler.distr.gauss.TwoModesFull
+dim: 5
+a: 1.0
+centered: false
+ill_conditioned: 'medium' # medium', 'hard'
+seed_q: 42
+rand_factor: 5.
+n_reference_samples: 16384

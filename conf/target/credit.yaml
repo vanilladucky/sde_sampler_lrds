@@ -1,0 +1,6 @@
+_target_: sde_sampler.distr.logistic_regression.LogisticRegression
+dim: 25
+data_type: 'credit'
+intercept_mean: 3.25
+intercept_scale: 0.5
+weight_scale: 1.25

@@ -6,6 +6,8 @@ from .gauss import Gauss
 
 
 class Delta(Gauss):
+    """Class for Dirac distribution."""
+
     def __init__(
         self,
         dim: int = 1,
@@ -23,6 +25,7 @@ class Delta(Gauss):
         )
 
     def sample(self, shape: tuple | None = None) -> torch.Tensor:
+        """Get samples from the dirac distribution."""
         if shape is None:
             shape = tuple()
         return self.loc.repeat(*shape, 1)

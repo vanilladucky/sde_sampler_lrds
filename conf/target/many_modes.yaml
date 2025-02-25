@@ -1,0 +1,7 @@
+_target_: sde_sampler.distr.gauss.ManyModes
+n_modes: 4
+dim: 8
+seed_loc: 42
+mixture_weight_factor: 3. # 1. corresponds to balanced GMM
+var: 0.5
+n_reference_samples: 10000

@@ -1,0 +1,6 @@
+_target_: sde_sampler.distr.gauss.TwoModes
+dim: 5
+a: 1.0
+centered: false
+ill_conditioned: 'not' # 'not', 'medium', 'hard'
+n_reference_samples: 16384

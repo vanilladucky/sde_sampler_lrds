@@ -1,0 +1,6 @@
+_target_: sde_sampler.distr.phi_four.PhiFour
+dim: 100
+a: 0.1
+b: 0.0
+dim_phys: 1
+beta: 20.
