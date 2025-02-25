@@ -233,7 +233,7 @@ class AlaDip(Distribution):
                 end = len(self.eval_data)
             else:
                 end = (i + 1) * batch_size
-            z = self.eval_data[(i * batch_size) : end, :]
+            z = self.eval_data[(i * batch_size): end, :]
             x, _ = self.coordinate_transform(torch.from_numpy(z).to(device).double())
             x_d_np = np.concatenate((x_d_np, x.cpu().numpy()))
 
@@ -246,7 +246,7 @@ class AlaDip(Distribution):
                 end = len(samples)
             else:
                 end = (i + 1) * batch_size
-            z = samples[(i * batch_size) : end, :]
+            z = samples[(i * batch_size): end, :]
             x, _ = self.coordinate_transform(z.double())
             x_np = np.concatenate((x_np, x.cpu().numpy()))
             z, _ = self.coordinate_transform.inverse(x)
@@ -311,7 +311,7 @@ class AlaDip(Distribution):
             [
                 hists_test[:, : (3 * ncarts - 6)],
                 np.zeros((nbins, 6)),
-                hists_test[:, (3 * ncarts - 6) :],
+                hists_test[:, (3 * ncarts - 6):],
             ],
             axis=1,
         )
@@ -325,7 +325,7 @@ class AlaDip(Distribution):
             [
                 hists_gen[:, : (3 * ncarts - 6)],
                 np.zeros((nbins, 6)),
-                hists_gen[:, (3 * ncarts - 6) :],
+                hists_gen[:, (3 * ncarts - 6):],
             ],
             axis=1,
         )

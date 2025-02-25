@@ -56,14 +56,14 @@ class Img(Distribution):
 
         if crop is not None:
             # Crop
-            img = img[crop[0] : crop[1], crop[2] : crop[3]]
+            img = img[crop[0]: crop[1], crop[2]: crop[3]]
 
         if embed is not None:
             tmp = np.ones((embed[0], embed[1]), dtype=np.float32)
             shift_x = (embed[0] - img.shape[0]) // 2
             shift_y = (embed[1] - img.shape[1]) // 2
             tmp[
-                shift_x : img.shape[0] + shift_x, shift_y : img.shape[1] + shift_y
+                shift_x: img.shape[0] + shift_x, shift_y: img.shape[1] + shift_y
             ] = img
             img = tmp
 

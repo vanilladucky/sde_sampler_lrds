@@ -389,7 +389,7 @@ class SubtrajBridge(Bridge):
         x = sample_uniform(domain=domain, batchsize=self.train_batch_size)
 
         # Simulate loss
-        subts = ts[idx_init : idx_end + 1]
+        subts = ts[idx_init: idx_end + 1]
         initial_log_prob = self.get_log_prob(t=ts[idx_init], detach=True)
         target_unnorm_log_prob = self.get_log_prob(t=ts[idx_end], detach=False)
         loss, metrics = self.loss(

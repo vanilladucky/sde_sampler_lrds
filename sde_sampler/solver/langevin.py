@@ -47,7 +47,7 @@ class LangevinSolver(Solver):
         }
 
         # Expectation predictions over time
-        exp_samples = xs[self.burn_steps :].reshape(-1, self.target.dim)
+        exp_samples = xs[self.burn_steps:].reshape(-1, self.target.dim)
         expectation_preds = {
             name: fn(exp_samples).mean() for name, fn in EXPECTATION_FNS.items()
         }

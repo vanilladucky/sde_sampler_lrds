@@ -17,7 +17,7 @@ def _compute_autodiv(outputs, inputs, create_graph=False):
     for i in range(outputs.shape[-1]):
         div += _compute_autograd(
             outputs[:, i], inputs, create_graph=create_graph, retain_graph=True
-        )[0][:, i : i + 1]
+        )[0][:, i: i + 1]
     return div
 
 

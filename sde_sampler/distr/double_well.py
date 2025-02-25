@@ -167,14 +167,14 @@ class MultiWell(Distribution):
             dim=-1, keepdim=True
         )
         if self.gauss is not None:
-            log_prob += self.gauss.unnorm_log_prob(x[:, self.n_double_wells :])
+            log_prob += self.gauss.unnorm_log_prob(x[:, self.n_double_wells:])
         assert log_prob.shape == (*x.shape[:-1], 1)
         return log_prob
 
     def score(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         score = self.double_well.score(x[:, : self.n_double_wells])
         if self.gauss is not None:
-            score_gauss = self.gauss.score(x[:, self.n_double_wells :])
+            score_gauss = self.gauss.score(x[:, self.n_double_wells:])
             score = torch.cat([score, score_gauss], dim=-1)
         return score
 
