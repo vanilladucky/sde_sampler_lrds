@@ -1,0 +1,4 @@
+_target_: sde_sampler.eq.sdes.CosineVP
+c: 0.008
+scale_diff_coeff: 1.
+terminal_t: 1.0
