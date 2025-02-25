@@ -97,6 +97,7 @@ class EulerIntegrator(Integrator):
         x_init: torch.Tensor,
         timesteps: torch.Tensor | None = None,
         bm: torchsde.BaseBrownian | None = None,
+        snr_adapted: bool = False
     ) -> torch.Tensor:
         if timesteps is None:
             timesteps = get_timesteps(
@@ -106,6 +107,7 @@ class EulerIntegrator(Integrator):
                 steps=self.steps,
                 rescale_t=self.rescale_t,
                 device=ts.device,
+                sde=sde if snr_adapted else None
             )
         ts_count = 0
         xs_out = []
