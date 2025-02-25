@@ -26,6 +26,7 @@ setup(
         "wandb==0.16.0",
         "plotly==5.18.0",
         "kaleido==0.2.1",
+        "scikit-learn==1.5.0"
     ],
     extras_require={
         "interactive": ["jupyter==1.0.0", "seaborn==0.13.0"],
