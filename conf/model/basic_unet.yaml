@@ -1,0 +1,6 @@
+defaults:
+  - base@base_model: unet
+  - _self_
+
+_target_: sde_sampler.models.reparam.ClippedCtrl
+clip_model: 1e4

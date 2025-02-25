@@ -13,9 +13,11 @@ from sde_sampler.utils.common import Results
 
 
 class LangevinSolver(Solver):
+    """Standard Langevin solver"""
     save_attrs: list[str] = []
 
     def __init__(self, cfg: DictConfig):
+        """Builds the object from the hydra configuration"""
         super().__init__(cfg=cfg)
         self.integrator: Integrator = instantiate(self.cfg.integrator)
         self.sde: LangevinSDE = instantiate(
@@ -32,6 +34,7 @@ class LangevinSolver(Solver):
             raise ValueError("Specify more eval_steps than burn_steps.")
 
     def run(self):
+        """Run the Langevin sampler"""
         start_time = time.time()
 
         # Sample prior

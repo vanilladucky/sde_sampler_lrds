@@ -1,0 +1,16 @@
+# @package _global_
+defaults:
+  - basic_oc_base
+  - /prior: delta
+  - /sde: pinned_bm_pis
+  - /model@generative_ctrl: basic
+  - /loss: em_reference_sde_lv
+  - _self_
+
+# Solver
+solver:
+  _target_: sde_sampler.solver.oc.RDS
+
+# Time steps
+train_timesteps:
+  start: 1e-4

@@ -18,7 +18,6 @@ import wandb
 import yaml
 from hydra.utils import call, instantiate
 from omegaconf import DictConfig, OmegaConf
-from torch_ema import ExponentialMovingAverage
 
 from sde_sampler.distr.base import Distribution
 from sde_sampler.eval.metrics import get_metrics
@@ -28,10 +27,12 @@ from sde_sampler.utils.common import CKPT_DIR, Results
 
 
 class Solver(torch.nn.Module):
+    """Base class for solvers"""
     # Attributes to be checkpointed and loaded
     save_attrs: list[str] = []
 
     def __init__(self, cfg: DictConfig):
+        """Builds the solver from the hydra configuration"""
         super().__init__()
         # Configuration and setup
         self.cfg = deepcopy(cfg)
@@ -105,6 +106,7 @@ class Solver(torch.nn.Module):
         self.initial_time = time.time()
 
     def setup(self):
+        """Sets up the solver"""
         logging.info("Setting up solver.")
         self.target.compute_stats()
         self.load_checkpoint(self.ckpt_file)
@@ -113,6 +115,7 @@ class Solver(torch.nn.Module):
     def get_metrics_and_plots(
         self, results: Results, decimals: int = 6, nbins: int = 100
     ) -> tuple[dict, dict]:
+        """Computes metrics and plots"""
         metrics = results.metrics
         plots = results.plots
 
@@ -158,6 +161,7 @@ class Solver(torch.nn.Module):
         results: Results,
         step=None,
     ) -> dict:
+        """Logs the results."""
         metrics, plots = self.get_metrics_and_plots(results)
 
         # Save figures to disk
@@ -178,6 +182,7 @@ class Solver(torch.nn.Module):
         return NotImplementedError
 
     def forward(self) -> Results:
+        """Runs the solver"""
         # Setup
         if not self.initialized:
             self.setup()
@@ -197,6 +202,7 @@ class Solver(torch.nn.Module):
         return results
 
     def state_dict(self) -> dict:
+        """Saves the model parameters"""
         state_dict = {}
         for key in self.save_attrs:
             attr = getattr(self, key)
@@ -207,6 +213,7 @@ class Solver(torch.nn.Module):
         return state_dict
 
     def load_state_dict(self, state_dict: dict):
+        """Loads the model parameters"""
         for key in self.save_attrs:
             if key in state_dict:
                 attr = getattr(self, key)
@@ -216,6 +223,7 @@ class Solver(torch.nn.Module):
                     setattr(self, key, state_dict[key])
 
     def latest_checkpoint(self) -> Path | None:
+        """Returns the last checkpoint"""
         if self.restore_ckpt_from_wandb:
             wandb_utils.restore_ckpt(self.out_dir)
 
@@ -224,6 +232,7 @@ class Solver(torch.nn.Module):
             return max(ckpts, key=os.path.getmtime)
 
     def store_checkpoint(self, suffix="") -> Path:
+        """Saves a checkpoint"""
         name = f"ckpt{suffix}.pt"
         path = self.ckpt_dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,47 +244,41 @@ class Solver(torch.nn.Module):
             wandb_utils.upload_ckpt(path, name=name)
         return path
 
-    def load_checkpoint(self, ckpt_file: str | Path | None = None):
+    def load_checkpoint(self, ckpt_file: str | Path | None):
+        """Loads a checkpoint"""
         if ckpt_file is None:
             ckpt_file = self.latest_checkpoint()
         if ckpt_file is not None:
             logging.info("Loading checkpoint %s", ckpt_file)
-            ckpt = torch.load(ckpt_file, map_location=self.device)
+            ckpt = torch.load(ckpt_file, weights_only=False, map_location=self.device)
             self.load_state_dict(ckpt)
 
 
 class Trainable(Solver):
+    """Base class for deep learning methods"""
     save_attrs: list[str] = [
         "n_steps",
         "time",
         "optim",
         "scheduler",
-        "ema",
     ]
 
     def __init__(self, cfg: DictConfig):
+        """Builds the object from the hydra configuration"""
         super().__init__(cfg=cfg)
-        # Eval and EMA devices
+        # Eval
         self.eval_device = self.cfg.get("eval_device")
         if self.eval_device is None:
             self.eval_device = self.device
         self.eval_device: torch.device | str
-        self.ema_device = self.cfg.get("ema_device")
-        if self.ema_device is None:
-            self.ema_device = self.device
-        self.ema_device: torch.device | str
+
+        # EMA
+        self.use_ema = self.cfg.get("use_ema", False)
+        self.ema_steps = self.cfg.get("ema_steps", 10)
 
         # Model
         self.setup_models()
         self.to(self.device)
-
-        # EMA
-        if self.cfg.get("ema"):
-            self.ema = instantiate(self.cfg.ema, parameters=self.trainable_parameters())
-            self.ema.to(self.ema_device)
-        else:
-            self.ema = None
-        self.ema: EMA | None
 
         # Optimization
         self.train_steps = self.cfg.train_steps
@@ -319,7 +322,6 @@ class Trainable(Solver):
             call(self.cfg.model_watcher, models=self)
 
         if self.wandb is not None:
-            self.wandb.summary["ema_device"] = str(self.ema_device)
             self.wandb.summary["eval_device"] = str(self.eval_device)
             self.wandb.summary["params/all"] = sum(p.numel() for p in self.parameters())
             self.wandb.summary["params/trainable"] = sum(
@@ -327,25 +329,22 @@ class Trainable(Solver):
             )
 
     def setup_models(self):
+        """Sets up the models"""
         raise NotImplementedError
 
     def compute_results(self) -> Results:
+        """Computes various metrics"""
         raise NotImplementedError
 
     @torch.no_grad()
     def evaluate(self, use_ema=True, log=True) -> Results:
+        """Evaluates the models"""
         logging.info("Evaluate at step %d (%.0f min).", self.n_steps, self.time // 60)
         training = self.training
         self.eval()
         self.to(self.eval_device)
 
-        if self.ema and use_ema:
-            self.ema.to(self.eval_device)
-            with self.ema.average_parameters():
-                results = self.compute_results()
-            self.ema.to(self.ema_device)
-        else:
-            results = self.compute_results()
+        results = self.compute_results(use_ema=self.use_ema and use_ema)
 
         if self.eval_stddev_steps is not None:
             results.metrics.update(self.loss_and_grad_var())
@@ -358,9 +357,11 @@ class Trainable(Solver):
         return results
 
     def compute_loss(self) -> tuple[torch.Tensor, dict]:
+        """Computes the variational loss"""
         raise NotImplementedError
 
     def loss_and_grad_var(self) -> dict[str, float]:
+        """Computes the variational loss and its gradient wrt parameters"""
         losses, grads = [], []
         for _ in range(self.eval_stddev_steps):
             self.optim.zero_grad()
@@ -384,6 +385,7 @@ class Trainable(Solver):
         }
 
     def grad_norm(self, norm_type: float = 2.0):
+        """Computes the norm of the loss gradient"""
         norms = [
             torch.linalg.vector_norm(p.grad, norm_type)
             for p in self.trainable_parameters()
@@ -396,7 +398,8 @@ class Trainable(Solver):
             if p.requires_grad:
                 yield p
 
-    def step(self) -> dict[str, float]:
+    def step(self, step_id) -> dict[str, float]:
+        """Generates a stochastic gradient step"""
         start_t = time.time()
         self.optim.zero_grad()
 
@@ -421,7 +424,7 @@ class Trainable(Solver):
             grad_ok = max_grad <= self.max_grad
             metrics["train/max_grad"] = max_grad.item()
 
-        # Step optimizer, scheduler, and ema
+        # Step optimizer and scheduler
         if loss_ok and grad_ok:
 
             # Clip grads
@@ -432,9 +435,9 @@ class Trainable(Solver):
 
             self.optim.step()
             self.scheduler.step()
-            if self.ema:
-                self.ema.update()
-                metrics["train/ema_decay"] = self.ema.get_current_decay()
+            if self.use_ema and (step_id % self.ema_steps == 0):
+                self.generative_ctrl_ema.update_parameters(self.generative_ctrl)
+
         else:
             self.n_steps_skip += 1
         time_step = time.time() - start_t
@@ -454,15 +457,16 @@ class Trainable(Solver):
         return metrics
 
     def run(self) -> Results:
+        """Run the training of the method"""
         if self.n_steps == 0 and self.eval_init:
             self.evaluate()
 
         logging.info("Start training at step %d.", self.n_steps)
         self.train()
-        for _ in range(self.n_steps, self.train_steps):
+        for step_id in range(self.n_steps, self.train_steps):
             # Train
             t_start = time.time()
-            metrics = self.step()
+            metrics = self.step(step_id)
             self.time += time.time() - t_start
             metrics.update(
                 {
@@ -496,11 +500,6 @@ class Trainable(Solver):
         logging.info("Finished training at step %d.", self.n_steps)
         results = self.evaluate()
         return results
-
-    def load_checkpoint(self, ckpt_file: str | Path | None):
-        super().load_checkpoint(ckpt_file=ckpt_file)
-        if self.ema is not None:
-            self.ema.to(self.ema_device)
 
 
 class CombinedScheduler:
@@ -619,98 +618,3 @@ class MultiStepParams:
     def load_state_dict(self, state_dict: dict):
         self.__dict__.update(state_dict)
         self.update()
-
-
-class EMA(ExponentialMovingAverage):
-    def __init__(
-        self,
-        *args,
-        update_after_step: int = 100,
-        update_every: int = 10,
-        inv_gamma: float = 1.0,
-        power: float = 2 / 3,
-        min_value: float = 0.0,
-        **kwargs,
-    ):
-        super().__init__(*args, use_num_updates=True, **kwargs)
-        self.update_every = update_every
-        self.update_after_step = update_after_step
-        self.inv_gamma = inv_gamma
-        self.power = power
-        self.min_value = min_value
-
-    def get_current_decay(self) -> float:
-        # From https://github.com/lucidrains/ema-pytorch/blob/main/ema_pytorch/ema_pytorch.py
-        epoch = max(self.num_updates - self.update_after_step - 1, 0.0)
-        value = 1 - (1 + epoch / self.inv_gamma) ** -self.power
-
-        if epoch <= 0:
-            return 0.0
-
-        return min(max(value, self.min_value), self.decay)
-
-    def update(self, parameters: Iterable[torch.nn.Parameter] | None = None) -> None:
-        """
-        Update currently maintained parameters.
-        Call this every time the parameters are updated, such as the result of
-        the `optimizer.step()` call.
-        Args:
-            parameters: Iterable of `torch.nn.Parameter`; usually the same set of
-                parameters used to initialize this object. If `None`, the
-                parameters with which this `ExponentialMovingAverage` was
-                initialized will be used.
-        """
-        self.num_updates += 1
-
-        if (self.num_updates % self.update_every) != 0:
-            return
-
-        parameters = self._get_parameters(parameters)
-        device = self.shadow_params[0].device
-
-        if self.num_updates <= self.update_after_step:
-            self.shadow_params = [p.clone().detach().to(device) for p in parameters]
-            return
-
-        decay = self.get_current_decay()
-        one_minus_decay = 1.0 - decay
-
-        with torch.no_grad():
-            for s_param, param in zip(self.shadow_params, parameters):
-                param = param.to(device)
-                tmp = s_param - param
-                # Tmp will be a new tensor so we can do in-place
-                tmp.mul_(one_minus_decay)
-                s_param.sub_(tmp)
-
-    @contextlib.contextmanager
-    def average_parameters(
-        self, parameters: Iterable[torch.nn.Parameter] | None = None
-    ):
-        r"""
-        Context manager for validation/inference with averaged parameters.
-
-        Equivalent to:
-
-            ema.store()
-            ema.copy_to()
-            try:
-                ...
-            finally:
-                ema.restore()
-
-        Args:
-            parameters: Iterable of `torch.nn.Parameter`; the parameters to be
-                updated with the stored parameters. If `None`, the
-                parameters with which this `ExponentialMovingAverage` was
-                initialized will be used.
-        """
-        parameters = self._get_parameters(parameters)
-        self.store(parameters)
-        self.copy_to(parameters)
-        try:
-            yield
-        finally:
-            self.restore(parameters)
-            # Free memory of collected params
-            self.collected_params = None

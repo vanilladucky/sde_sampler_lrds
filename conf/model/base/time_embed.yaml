@@ -5,8 +5,8 @@ channels: 64
 activation: 
   _target_: torch.nn.GELU
 last_bias_init:
-  _target_: torch.nn.init.zeros_
+  _target_: sde_sampler.models.utils.init_bias_uniform_zeros
   _partial_: True
 last_weight_init:
-  _target_: torch.nn.init.zeros_
+  _target_: sde_sampler.models.utils.kaiming_uniform_zeros_
   _partial_: True

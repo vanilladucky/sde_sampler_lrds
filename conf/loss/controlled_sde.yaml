@@ -1,8 +1,7 @@
 # Loss
-_target_: sde_sampler.losses.oc.ReferenceSDELoss
+_target_: sde_sampler.losses.oc.ControlledLangevinSDELoss
 method: kl
 traj_per_sample: 1
 max_rnd:
 sde_ctrl_noise:
 sde_ctrl_dropout:
-  

@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - basic_oc_base
+  - /prior: gauss
+  - /sde: vp_10
+  - /model@generative_ctrl: basic
+  - /loss: em_reference_sde_lv
+  - _self_
+
+# Solver
+solver:
+  _target_: sde_sampler.solver.oc.RDS
+
+prior:
+  scale: ${sde.scale_diff_coeff}

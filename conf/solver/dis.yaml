@@ -1,7 +1,7 @@
 # @package _global_
 defaults:
-  - oc_base
-  - /prior: gauss_truncate
+  - basic_oc_base
+  - /prior: gauss
   - /sde: vp_10
   - /model@generative_ctrl: lerp
   - /loss: time_reversal_lv
@@ -11,7 +11,5 @@ defaults:
 solver:
   _target_: sde_sampler.solver.oc.Bridge
 
-# Model
-generative_ctrl:
-  clip_score: 10.
-  clip_model: 10.
+prior:
+  scale: ${sde.scale_diff_coeff}

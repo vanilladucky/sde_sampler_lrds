@@ -1,16 +1,14 @@
 defaults:
   - base@score_model: time_embed
-  - base@base_model: fouriermlp
+  - base@base_model: unet
   - _self_
 
-_target_: sde_sampler.models.reparam.LerpPriorCtrl
+_target_: sde_sampler.models.reparam.ScoreCtrl
 detach_score: False
 score_model:
   last_bias_init:
-    _target_: torch.nn.init.constant_
-    val: 1.
+    _target_: sde_sampler.models.utils.init_bias_uniform_zeros
     _partial_: True
 clip_score: 1e4
 clip_model: 1e4
 scale_score: 1.
-hard_constraint: False

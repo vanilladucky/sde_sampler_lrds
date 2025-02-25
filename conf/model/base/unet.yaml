@@ -1,0 +1,3 @@
+_target_: sde_sampler.models.mnist_unet.Unet
+n_channels: 16
+init_last_layer_with_zeros: True
