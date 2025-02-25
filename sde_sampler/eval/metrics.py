@@ -10,7 +10,7 @@ from sde_sampler.distr.base import EXPECTATION_FNS, Distribution
 
 
 def abs_and_rel_error(
-    prediction: Number, target: Number, suffix: str = "", eps: float = 1e-8
+        prediction: Number, target: Number, suffix: str = "", eps: float = 1e-8
 ) -> dict[str, float]:
     assert isinstance(prediction, Number)
     assert isinstance(target, Number)
@@ -23,11 +23,11 @@ def abs_and_rel_error(
 
 
 def compute_errors(
-    prediction: torch.Tensor | float,
-    target: torch.Tensor | float | None = None,
-    name: str = "error",
-    weights: torch.Tensor | None = None,
-    eps: float = 1e-8,
+        prediction: torch.Tensor | float,
+        target: torch.Tensor | float | None = None,
+        name: str = "error",
+        weights: torch.Tensor | None = None,
+        eps: float = 1e-8,
 ) -> dict[str, float]:
     # Prediction
     output = {}
@@ -68,13 +68,13 @@ def frac_inside_domain(samples, domain):
 
 
 def get_metrics(
-    distr: Distribution,
-    samples: torch.Tensor,
-    weights: torch.Tensor | None = None,
-    log_norm_const_preds: dict[str, torch.Tensor | float] | None = None,
-    expectation_preds: dict[str, torch.Tensor | float] | None = None,
-    marginal_dims: list[int] | None = None,
-    sample_losses: dict[str, Callable] | None = None,
+        distr: Distribution,
+        samples: torch.Tensor,
+        weights: torch.Tensor | None = None,
+        log_norm_const_preds: dict[str, torch.Tensor | float] | None = None,
+        expectation_preds: dict[str, torch.Tensor | float] | None = None,
+        marginal_dims: list[int] | None = None,
+        sample_losses: dict[str, Callable] | None = None,
 ) -> dict[str, float]:
     # Filter
     if not all(d < distr.dim for d in marginal_dims):
@@ -86,8 +86,22 @@ def get_metrics(
     expectation_preds = expectation_preds or {}
     log_norm_const_preds = log_norm_const_preds or {}
 
+    # Add more metrics if neeeded
+    EXPECTATION_FNS_ = EXPECTATION_FNS.copy()
+    if hasattr(distr, 'compute_mode_weight'):
+        EXPECTATION_FNS_['mode_weight'] = lambda samples: distr.compute_mode_weight(samples).item()
+    if hasattr(distr, 'compute_phi_four_weight'):
+        EXPECTATION_FNS_['weight'] = lambda samples: distr.compute_phi_four_weight(samples).item()
+    if distr.has_entropy():
+        EXPECTATION_FNS_['emc'] = lambda samples: distr.entropy(samples).item()
+        EXPECTATION_FNS_['kl_weights'] = lambda samples: distr.kl_weights(samples).item()
+        EXPECTATION_FNS_['tv_weights'] = lambda samples: distr.tv_weights(samples).item()
+        EXPECTATION_FNS_['num_forgotten_modes'] = lambda samples: distr.compute_forgotten_modes(samples).item()
+    if hasattr(distr, 'compute_predictive_log_prob'):
+        EXPECTATION_FNS_['avg_predictive_log_prob'] = lambda samples: distr.compute_predictive_log_prob(samples).item()
+
     # Expectations
-    for name, fn in EXPECTATION_FNS.items():
+    for name, fn in EXPECTATION_FNS_.items():
         target = distr.expectations.get(name)
         prediction = fn(samples)
         metrics.update(
@@ -120,7 +134,7 @@ def get_metrics(
     # ESS
     if weights is not None:
         assert weights.shape == (samples.shape[0], 1)
-        ess = weights.sum() ** 2 / (weights**2).sum()
+        ess = weights.sum() ** 2 / (weights ** 2).sum()
         ess = ess.item()
         metrics["eval/effective_sample_size"] = ess
         metrics["eval/norm_effective_sample_size"] = ess / len(weights)
