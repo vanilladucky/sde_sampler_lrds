@@ -1,227 +1,83 @@
-# Sampling via learned diffusions: `sde_sampler`
-> Accompanying code for the paper ['Improved sampling via learned diffusions'](https://arxiv.org/abs/2307.01198) [[`ICLR'24`](https://openreview.net/forum?id=h4pNROsO06),[`BibTeX`](#references)] and ['An optimal control perspective on diffusion-based generative modeling'](https://arxiv.org/abs/2211.01364) [[`TMLR'24`](https://openreview.net/forum?id=oYIjw37pTP),[`BibTeX`](#references)].
+# Learned Reference-based Diffusion Sampling for multi-modal distributions: `sde_sampler_lrds`
 
-This repo contains various [methods](#solvers) (DIS, Bridge, DDS, PIS) to sample from unnormalized densities by learning to control stochastic differential equations (SDEs). Given an unnormalized target density $\rho=Zp_{\mathrm{target}}$, where $Z = \int \rho(x) \mathrm{d}x$, we optimize a neural network $u$ to control the SDE $$\mathrm{d}X^u_t = (\mu + \sigma u)(X^u_t,t) \mathrm{d}t + \sigma(t) \mathrm{d}W_t, \quad X^u_0 \sim p_{\mathrm{prior}},$$ 
-such that $X^u_T \sim p_{\mathrm{target}}$. Then one can sample from the prior $p_{\mathrm{prior}}$ and simulate the SDE $X^u$ to obtain samples from $p_{\mathrm{target}}$.
+![LRDS](assets/lrds.gif)
 
-<p align="center"><img src="assets/evolution.png" width="95%"></p>
+This is the official code for **"Learned Reference-based Diffusion Sampler for Multi-Modal Distributions"** ([ICLR'25](https://openreview.net/forum?id=fmJUYgmMbL)). This repository is a fork of [github.com/juliusberner/sde_sampler](https://github.com/juliusberner/sde_sampler) and extends its capabilities.  
 
+### Features:  
+- Implements previous diffusion samplers [**PIS**](https://openreview.net/forum?id=_uCb2ynRu7Y) ([`solver.oc.PIS`](./sde_sampler/solver/oc.py)), [**DDS**](https://openreview.net/forum?id=8pvnfTAbu1f) ([`solver.oc.DDS`](./sde_sampler/solver/oc.py)), [**DIS**](https://openreview.net/forum?id=h4pNROsO06) ([`solver.oc.Bridge`](./sde_sampler/solver/oc.py)), along with the generic **RDS** ([`solver.oc.RDS`](./sde_sampler/solver/oc.py)) class proposed in our paper, and custom implementations of [**CMCD**](https://openreview.net/forum?id=PP1rudnxiW) ([`solver.oc.CMCD`](./sde_sampler/solver/oc.py)) and an alternative **DIS** ([`loss.oc.DiscreteTimeReversalLossEI`](./sde_sampler/loss/oc.py)). We also implement the different metrics from [**Beyond ELBOs**](https://proceedings.mlr.press/v235/blessing24a.html) (see `compute_eubo` in [`loss.oc`](./sde_sampler/loss/oc.py)).
+- Provides all **multi-modal target distributions** and related **metrics** from the paper
+	* Mixture of Two Gaussians ([`distr.gauss.TwoModes`](./sde_sampler/distr/gauss.py)) and ([`distr.gauss.TwoModesFull`](./sde_sampler/distr/gauss.py))
+	* Mixture of multiple Gaussians ([`distr.gauss.ManyModes`](./sde_sampler/distr/gauss.py))
+	* Checkerboard ([`distr.checkerboard.Checkernoard`](./sde_sampler/distr/checkerboard.py))
+	* Rings ([`distr.rings.Rings`](./sde_sampler/distr/rings.py))
+	* Phi Four ([`distr.phi_four.PhiFour`](./sde_sampler/distr/phi_four.py)) based on the implementation of [github.com/marylou-gabrie/flonaco](https://github.com/marylou-gabrie/flonaco)
+	* Bayesian Logisitic Regression ([`distr.logistic_regression.LogisticRegression`](./sde_sampler/distr/logistic_regression.py)) with datasets stored in [`data/`](./data/)
+	* Mixture of NICE normalizing flows ([`distr.nice.MixtureNice`](./sde_sampler/distr/nice.py)) with flows trained on MNIST in [`data/`](./data/)
+- Includes **SMC** ([`additions.ebm_mle.smc_sampler`](./sde_sampler/additions/ebm_mle.py)), **RE** ([`additions.ebm_mle.re_sampler`](./sde_sampler/additions/ebm_mle.py)), [**PDDS**](https://proceedings.mlr.press/v235/phillips24a.html) ([`additions.ebm_mle.smc_sampler`](./sde_sampler/additions/ebm_mle.py) with `use_pdds_weights=True`), and standard **MCMC samplers** ([`additions.mcmc.mala_step/ula_step/rwmh_step`](./sde_sampler/additions/mcmc.py)).  
+- Implements **Energy-Based Model (EBM) training** methods: [**DA-EBM**](https://arxiv.org/abs/2304.10707) ([`additions.da_ebm.DAEBM`](./sde_sampler/additions/da_ebm.py)), [**DRL**](https://openreview.net/forum?id=v_1Soh8QUNc) ([`additions.drl.DiffusionRecoveryLikelihood`](./sde_sampler/additions/drl.py)) as well as our own RE-based algorithm ([`additions.ebm_mle.MaximumLikelihoodEBM`](./sde_sampler/additions/ebm_mle.py)), and score matching techniques [**DSM**](https://openreview.net/forum?id=PxTIG12RRHS) ([`additions.sm.ScoreMatching`](./sde_sampler/additions/sm.py)), [**TSM**](https://arxiv.org/abs/2402.08667) ([`additions.sm.TargetScoreMatching`](./sde_sampler/additions/sm.py)).  
+
+This repository serves as a comprehensive toolkit for diffusion-based sampling in complex multi-modal settings.
 
 ## Installation
 
-- **Repo:** First clone the repo:
+### 1. Clone the Repository  
+```bash
+git clone git@github.com:h2o64/sde_sampler_lrds.git
+cd sde_sampler
+```  
 
-  ```
-  git clone git@github.com:juliusberner/sde_sampler.git
-  cd sde_sampler
-  ```
+### 2. Set Up the Environment  
+We recommend using [Conda](https://conda.io/docs/user-guide/install/download.html):  
+```bash
+conda create -n sde_sampler python=3.9 pip --yes  
+conda activate sde_sampler
+```  
 
-- **Environment:** We recommend using [Conda](https://conda.io/docs/user-guide/install/download.html) to set up the codebase:
-  ```
-  conda create -n sde_sampler python==3.9 pip --yes
-  conda activate sde_sampler
-  ```
-- **GPU:** If you have a GPU, check your CUDA version using `nvidia-smi` and install compatible `cuda` (for `pykeops`) and `torch`/`torchvision` packages using the [PyTorch install guide](https://pytorch.org/get-started) (see [here](https://pytorch.org/get-started/previous-versions/) for previous versions).
-  For instance, if your CUDA version is `>=11.7`, you could run:
-  ```
-  conda install pytorch==2.0.1 torchvision==0.15.2 pytorch-cuda=11.7 cuda-minimal-build=11.7 -c pytorch -c nvidia --yes
-  ```
-- **CPU:** In case you do not have a GPU, you can replace the previous step with:
-  ```
-  conda install pytorch torchvision cpuonly -c pytorch --yes
-  ```
+### 3. Install Dependencies  
 
-- **Packages:** Now, you can install the [`sde_sampler`](setup.py) package:
-  ```
-  pip install -e .
-  ```
+#### **For GPU Users**  
+Check your CUDA version with `nvidia-smi` and install the appropriate `cuda` (for `pykeops`) and `torch`/`torchvision` packages using the [PyTorch install guide](https://pytorch.org/get-started).  
+For example, if your CUDA version is **>=11.7**, install:  
+```bash
+conda install pytorch=2.0.1 torchvision=0.15.2 pytorch-cuda=11.7 cuda-minimal-build=11.7 -c pytorch -c nvidia --yes  
+```  
 
-- **Wandb:** Finally, login to your wandb account:
-  ```
-  wandb login
-  ```
-  You can also omit this step and add the `wandb.mode=disabled` command line arg to your runs.
+#### **For CPU Users**  
+If you don’t have a GPU, install the CPU-only version:  
+```bash
+conda install pytorch torchvision cpuonly -c pytorch --yes  
+```  
 
-- **Additional requirements:** See [targets](#targets), for requirements and steps which are only needed for specific targets.
-
-- **Test:** To test the `pykeops` and `torch` installations on a machine with GPU:
-  ```
-  python -c "import torch; print(torch.cuda.is_available())"
-  python -c "import pykeops; pykeops.test_torch_bindings()"
-  ```
-
-## Quick Start
-
-Sample from a [shifted double well](conf/target/dw_shift.yaml) using the [DIS solver](conf/solver/basic_dis.yaml) and the log-variance divergence:
-
-```
-python scripts/main.py target=dw_shift solver=basic_dis loss.method=lv
+### 4. Install the `sde_sampler_lrds` Package  
+```bash
+pip install -e .
 ```
 
-- This outputs a link to the metrics and plots: `wandb: 🚀 View run at <link>`
-- You also find the metrics/plots/checkpoints locally at `logs/<Y-m-d>/<H-M-S>`.
+## Reproducing the experiments
 
-## How-To
+All the scripts to rerun the experiments are in [`experiments/`](./experiments/) and are completely self contained (they are entirely determined by the arguments given to the script). The key auxiliary function is `experiments.benchmark_utils.make_model` which abstracts the Hydra config. It takes the following arguments
+- `solver_type` : Type of solver (among `dds_orig`, `pis_orig`, `dis_orig`, `cmcd`, `vp-ref` or `pbm-ref`)
+- `ref_type` : Type of reference for RDS (among `default`, `gaussian`, `gmm` or `nn`)
+- `loss_type` : Variant of the divergence loss (among `kl` or `lv`) 
+- `integrator_type`: Variant of the SDE integrator for RDS (among `em`, `ei` or `ddpm_like`)
+- `model_type`: Type of neural network parametrization (among `target_informed_zero_init`, `target_informed_unet_zero_init`, `target_informed_langevin_init`, `target_informed_lerp_tempering`, `base_zero_init`or `unet_zero_init`)
+- `time_type`: Type of time discretization (among `uniform` or `snr`)
+- `solver_details`: Dictionnary containing the reference details
+- `target_details`: Parameters of the target (generated by `experiments.benchmark_utils.make_target_details`)
+- `training_details`: Dictionnary with attributes `train_steps`, `train_batch_size` and `eval_batch_size`
 
-### Setup
-
-We use:
-* [`hydra`](https://hydra.cc/) for [config management](#configs) and [experiment execution](#multi-run--slurm).
-* [`wandb`](https://wandb.ai/) for experiment tracking and hyperparameter [sweeps](#wandb-sweeps).
-
-
-### Configs
-All configs can be found in the folder [`conf`](conf). You can just adapt the existing `.yaml` configs or add new ones. Configs are hierarchical and will be dynamically created by composition, see the [Hydra intro](https://hydra.cc/docs/intro/) or run 
-```
-python scripts/main.py --help
-```
-
-Most important:
-
-1. Configs are based on [`conf/base.yaml`](conf/base.yaml) and the solver-specific config in [`conf/solver`](conf/solver).
-
-2. Config defaults can be overridden on the command line analogously as specified in the `defaults` list in each config. For instance:
-    * [`conf/base.yaml`](conf/base.yaml) contains the default `solver: dis`. To select the PIS solver in [`conf/solver/basic_pis.yaml`](conf/solver/basic_pis.yaml), we can add the command line arg `solver=basic_pis`.
-    * [`conf/solver/basic_pis.yaml`](conf/solver/basic_pis.yaml) contains the default `/model@generative_ctrl: score`. To use the model in [`conf/model/clipped.yaml`](conf/model/clipped.yaml), we can add the command line arg `model@generative_ctrl=clipped`.
-    * To add a new default use `+`. To add the learning rate scheduler [`conf/lr_scheduler/multi_step.yaml`](conf/lr_scheduler/multi_step.yaml), use the command line arg `+lr_scheduler=multi_step`.
-
-3. Each individual entry of the config can be overriden on the command line using the nested config keys separated by dots, e.g., `generative_ctrl.base_model.channels=32`. 
-
-4. You can also change the `wandb` setting in [`conf/base.yaml`](conf/base.yaml). To change the project to `test`, add `wandb.project=test` to the args.
-
-
-Combining the examples above:
-```
-python scripts/main.py solver=basic_pis model@generative_ctrl=clipped generative_ctrl.base_model.channels=32 +lr_scheduler=multi_step wandb.project=test
-```
-
-
-### Multi-run & Slurm
-
-Run the experiment above on the [shifted double well](conf/target/dw_shift.yaml) as well as a [Gaussian mixture model](conf/target/gmm.yaml) for both the log-variance and the KL divergence (using the hydra multi-run flag `-m/--multirun`):
-
-```
-python scripts/main.py -m +launcher=<launcher> target=dw_shift,gmm solver=basic_dis loss.method=kl,lv
-```
-Set `<launcher>` to
-- [`joblib`](conf/launcher/joblib.yaml) if you work on a local machine. This uses the [`joblib`](https://joblib.readthedocs.io/en/stable/) library.
-- [`slurm`](conf/launcher/slurm.yaml) if you work on a [Slurm](https://slurm.schedmd.com/documentation.html) cluster. You might need to adapt the default configs in [`conf/launcher/slurm.yaml`](conf/launcher/slurm.yaml) to your cluster.
-
-### Wandb sweeps
-
-You can find an examplary sweep in [`conf/sweeps`](conf/sweeps).
-1. Invoke the sweep:
-  ```
-  wandb sweep conf/sweeps/<sweep_name>.yaml
-  ```
-
-2. Start agents as described in the output of the previous command. For slurm, you can use 
-  ```
-  SWEEP_ID=<wandb_entity>/<wandb_project>/<sweep_id> sbatch -a 0-<num agents> bin/slurm_sweep.sh
-  ```
-
-### Resuming
-
-You can resume a run by specifying its wandb id `wandb.id=<wandb-id>`. With the default settings, you can run
-```
-python scripts/main.py --config-name=setup wandb.id=<wandb-id>
-```
-and the previous configuration and latest ckeckpoint will be automatically downloaded from wandb.
-When using the same log directory, the wandb id is inferred automatically (which is useful for slurm preemption). You can also add the log directory manually via the command line arg `hydra.run.dir=<logs/Y-m-d/H-M-S>`.
-For more flexibility (e.g, adapting configs and command line args), you can also specify the checkpoint `ckpt_file=<path-to-ckpt-file>` directly.
-
-## Experiments
-
-### Solvers
-
-Our predefined solvers in [`conf/solver`](conf/solver) include the following methods:
-
-1. **Time-Reversed Diffusion Sampler (DIS)** `solver=dis` (see our [paper](https://arxiv.org/abs/2211.01364))
-
-2. **Denoising Diffusion Sampler (DDS)** `solver=dds` (see the [DDS repo](https://github.com/franciscovargas/denoising_diffusion_samplers); note that we also provide `solver=dds_euler`, which uses the Euler integrator for DDS instead). 
-
-3. **Path Integral Sampler (PIS)** `solver=pis` (see the [PIS repo](https://github.com/qsh-zh/pis))
-
-4. **Bridge sampler (Bridge)** `solver=bridge` (see our [paper](https://arxiv.org/abs/2307.01198); this can be viewed as generalized Schrödinger bridge)
-
-5. **Unadjusted Langevin algorithm (ULA)** `solver=langevin` 
-
-The configs with prefix `basic_` in [`conf/solver`](conf/solver) are simplified and can easily be adapted to specific [targets](#targets) or settings. 
-
-For all solvers except `langevin`, you can use either the KL divergence `loss.method=kl` or the log-variance divergence `loss.method=lv` (see our [paper](https://arxiv.org/abs/2307.01198)).
-For the first three solvers, the log-variance divergence can also be computed over trajectories with the same initial point by using `loss.method=lv_traj`.
-In most of our experiments, the log-variance divergence led to improved performance.
-
-
-### Targets
-
-Our predefined targets in [`conf/target`](conf/target) include the following distributions:
-
-- **Funnel** `target=funnel` (10d, see our [paper](https://arxiv.org/abs/2211.01364) and the [PIS repo](https://github.com/qsh-zh/pis))
-
-- **Gaussian Mixture Model** `target=gmm` (2d, see our [paper](https://arxiv.org/abs/2211.01364) and the [PIS repo](https://github.com/qsh-zh/pis))
-
-- **Multi/Double-Well** `target=dw_shift`, `target=mw`, and `target=mw_50d` (1d/5d/50d, see our [paper](https://arxiv.org/abs/2211.01364))
-
-- **Gaussian** `target=gauss_shift` (1d)
-
-- **Image**: `target=img` (2d, see the [SNF repo](https://github.com/noegroup/stochastic_normalizing_flows)): For better visualization of the image density, we suggest to use `eval_batch_size=500000`.
-
-- **Rings** `target=rings` (2d, see the [PIS repo](https://github.com/qsh-zh/pis))
-
-- **Rosenbrock**: `target=rosenbrock` (15d, to test samplers for global optimization, see [arxiv:2111.00402](https://arxiv.org/abs/2111.00402) and [wikipedia](https://en.wikipedia.org/wiki/Rosenbrock_function))
-
-- **Alanine Dipeptide** `target=aladip` (60d, see the [FAB repo](https://github.com/lollcat/fab-torch)): Install the following additional requirements
-  ```
-  conda install -c conda-forge openmm openmmtools=0.23.1 --yes
-  pip install boltzgen@git+https://github.com/VincentStimper/boltzmann-generators.git@v1.0
-  ```
-  Then, download the evaluation data using
-  ```
-  bash bin/download_aladip.sh
-  ```
-
-- **NICE** `target=nice` (196d, see [arxiv:2208.07698](https://arxiv.org/abs/2208.07698) and https://github.com/fmu2/NICE): First, train the NICE model on MNIST using
-  ```
-  python scripts/train_nice.py
-  ```
-  or, on a slurm cluster, using
-  ```
-  sbatch bin/slurm_train_nice.sh
-  ```
-  This saves a checkpoint in `data/nice.pt`, which is then automatically used.
-
-- **Log Gaussian Cox Process** `target=cox` (1600d, see the [PIS repo](https://github.com/qsh-zh/pis))
-
+A demo notebook is available at [`notebooks/demo_gmm_lrds.ipynb`](./notebooks/demo_gmm_lrds.ipynb).
 
 ## References
 
-If you use parts of this codebase in your research, please use the following BibTeX entries.
-
+If you found the codebase usefull, please consider citing us!
 ```
-@article{berner2024optimal,
-  title={An optimal control perspective on diffusion-based generative modeling},
-  author={Berner, Julius and Richter, Lorenz and Ullrich, Karen},
-  journal={Transactions on Machine Learning Research},
-  issn={2835-8856},
-  year={2024},
-  url={https://openreview.net/forum?id=oYIjw37pTP},
-}
-
-@inproceedings{richter2024improved,
-  title={Improved sampling via learned diffusions},
-  author={Richter, Lorenz and Berner, Julius},
-  booktitle={International Conference on Learning Representations},
-  year={2024}
+@inproceedings{noble2025learned,
+	title={Learned Reference-based Diffusion Sampler for multi-modal distributions},
+	author={Maxence Noble and Louis Grenioux and Marylou Gabri{\'e} and Alain Oliviero Durmus},
+	booktitle={The Thirteenth International Conference on Learning Representations},
+	year={2025},
+	url={https://openreview.net/forum?id=fmJUYgmMbL}
 }
 ```
-
-
-## License
-
-The majority of the project is licensed under MIT. 
-Portions of the project are adapted from other repositories (as mentioned in the code): 
-- https://github.com/fmu2/NICE is also licensed under MIT,
-- https://github.com/yang-song/score_sde is licensed under Apache-2.0, 
-- https://github.com/noegroup/stochastic_normalizing_flows is licensed under BSD-3-Clause,
-- the repositories https://github.com/lollcat/fab-torch, https://github.com/qsh-zh/pis, and https://github.com/fwilliams/scalable-pytorch-sinkhorn do not provide licenses.
