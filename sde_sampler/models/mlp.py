@@ -23,12 +23,16 @@ class Model(nn.Module):
     def init_linear(
         layer: nn.Linear,
         bias_init: Callable | None = None,
-        weight_init: Callable | None = None,
+        weight_init: Callable | None = None
     ):
-        if bias_init:
-            bias_init(layer.bias)
         if weight_init:
             weight_init(layer.weight)
+        if bias_init:
+            if ((hasattr(bias_init, '__code__') and 'weight' in bias_init.__code__.co_varnames)) \
+                    or ((hasattr(bias_init, 'func') and 'weight' in bias_init.func.__code__.co_varnames)):
+                bias_init(layer.bias, weight=layer.weight)
+            else:
+                bias_init(layer.bias)
 
     def flatten(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         if t.dim() == 0 or t.shape[0] == 1:
@@ -38,6 +42,16 @@ class Model(nn.Module):
         assert x.shape[-1] == self.dim
         assert t.shape == (x.shape[0], 1)
         return torch.cat([t, x], dim=1)
+
+
+class AngleEncoding(nn.Module):
+
+    def __init__(self, dim=-1):
+        super(AngleEncoding, self).__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        return torch.concatenate([torch.sin(x), torch.cos(x)], dim=self.dim)
 
 
 class TimeEmbed(Model):
@@ -91,12 +105,19 @@ class FourierMLP(Model):
         channels: int = 64,
         last_bias_init: Callable | None = None,
         last_weight_init: Callable | None = None,
+        use_angle_encoding: bool = False,
         **kwargs,
     ):
         super().__init__(dim=dim, **kwargs)
         self.channels = channels
         self.activation = activation
-        self.input_embed = nn.Linear(self.dim, self.channels)
+        if use_angle_encoding:
+            self.input_embed = nn.Sequential(
+                AngleEncoding(),
+                nn.Linear(2 * self.dim, self.channels)
+            )
+        else:
+            self.input_embed = nn.Linear(self.dim, self.channels)
         self.timestep_embed = TimeEmbed(
             dim_out=self.channels,
             activation=self.activation,
@@ -122,57 +143,6 @@ class FourierMLP(Model):
         return self.out_layer(self.activation(embed))
 
 
-class FeedForward(Model):
-    def __init__(
-        self,
-        dim: int,
-        arch: Sequence[int],
-        activation: Callable,
-        normalization_factory=None,
-        normalization_kwargs=None,
-        last_bias_init: Callable | None = None,
-        last_weight_init: Callable | None = None,
-        **kwargs,
-    ):
-        super().__init__(dim=dim, **kwargs)
-
-        # Affine linear layer
-        bias = normalization_factory is None
-        self.hidden_layer = nn.ModuleList([nn.Linear(self.dim_in, arch[0], bias=bias)])
-        self.hidden_layer += [
-            nn.Linear(arch[i], arch[i + 1], bias=bias) for i in range(len(arch) - 1)
-        ]
-        self.out_layer = nn.Linear(arch[-1], self.dim_out)
-        Model.init_linear(
-            self.out_layer, bias_init=last_bias_init, weight_init=last_weight_init
-        )
-
-        # Activation function
-        self.activation = activation
-
-        # Normalization layer
-        if normalization_factory:
-            normalization_kwargs = normalization_kwargs or {}
-            self.norm_layer = nn.ModuleList(
-                [
-                    normalization_factory(num_features, **normalization_kwargs)
-                    for num_features in arch
-                ]
-            )
-        else:
-            self.norm_layer = None
-
-    def forward(self, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-        tensor = self.flatten(t, x)
-
-        for i, linear in enumerate(self.hidden_layer):
-            tensor = self.activation(linear(tensor))
-            if self.norm_layer is not None:
-                tensor = self.norm_layer[i](tensor)
-
-        return self.out_layer(tensor)
-
-
 class DenseNet(Model):
     def __init__(
         self,
@@ -181,12 +151,18 @@ class DenseNet(Model):
         activation: Callable,
         last_bias_init: Callable | None = None,
         last_weight_init: Callable | None = None,
+        use_angle_encoding: bool = False,
         **kwargs,
     ):
         super().__init__(dim=dim, **kwargs)
-        self.nn_dims = [self.dim_in] + arch
+        if use_angle_encoding:
+            first_layer = [AngleEncoding()]
+            self.nn_dims = [2 * self.dim_in] + arch
+        else:
+            first_layer = []
+            self.nn_dims = [self.dim_in] + arch
         self.hidden_layer = nn.ModuleList(
-            [
+            first_layer + [
                 nn.Linear(sum(self.nn_dims[: i + 1]), self.nn_dims[i + 1])
                 for i in range(len(self.nn_dims) - 1)
             ]
@@ -202,103 +178,3 @@ class DenseNet(Model):
         for layer in self.hidden_layer:
             tensor = torch.cat([tensor, self.activation(layer(tensor))], dim=1)
         return self.out_layer(tensor)
-
-
-class LevelNet(Model):
-    """
-    Network module for a single level
-    """
-
-    def __init__(
-        self,
-        dim,
-        dim_embed,
-        level,
-        activation,
-        normalization_factory=None,
-        normalization_kwargs=None,
-        last_bias_init: Callable | None = None,
-        last_weight_init: Callable | None = None,
-        **kwargs,
-    ):
-        super().__init__(dim=dim, **kwargs)
-
-        self.level = level
-        bias = normalization_factory is None
-        self.dense_layers = nn.ModuleList(
-            [nn.Linear(self.dim_in, dim_embed, bias=bias)]
-        )
-        self.dense_layers += [
-            nn.Linear(dim_embed, dim_embed, bias=bias) for _ in range(2**level - 1)
-        ]
-        self.dense_layers.append(nn.Linear(dim_embed, self.dim_out))
-        Model.init_linear(self.dense_layers[-1], bias_init=last_bias_init, weight_init=last_weight_init)  # type: ignore
-        if normalization_factory is None:
-            self.norm_layers = None
-        else:
-            normalization_kwargs = normalization_kwargs or {}
-            self.norm_layers = nn.ModuleList(
-                [
-                    normalization_factory(dim_embed, **normalization_kwargs)
-                    for _ in range(2**level)
-                ]
-            )
-        self.act = activation
-
-    def forward(self, t, x, res_tensors=None):
-        tensor = self.flatten(t, x)
-        out_tensors = []
-        tensor = self.dense_layers[0](tensor)
-        for i, dense in enumerate(self.dense_layers[1:]):  # type: ignore
-            if self.norm_layers is not None:
-                tensor = self.norm_layers[i](tensor)
-            tensor = self.act(tensor)
-            tensor = dense(tensor)
-            if res_tensors:
-                tensor = tensor + res_tensors[i]
-            if i % 2 or self.level == 0:
-                out_tensors.append(tensor)
-        return out_tensors
-
-
-class MultilevelNet(Model):
-    """
-    Multilevel net
-    """
-
-    def __init__(
-        self,
-        dim,
-        activation,
-        factor=5,
-        levels=4,
-        normalization_factory=None,
-        normalization_kwargs=None,
-        last_bias_init: Callable | None = None,
-        last_weight_init: Callable | None = None,
-        **kwargs,
-    ):
-        super().__init__(dim=dim, **kwargs)
-        self.nets = nn.ModuleList(
-            [
-                LevelNet(
-                    dim=dim,
-                    dim_embed=factor * self.dim_in,
-                    level=level,
-                    activation=activation,
-                    normalization_factory=normalization_factory,
-                    normalization_kwargs=normalization_kwargs,
-                    last_bias_init=last_bias_init,
-                    last_weight_init=last_weight_init,
-                    **kwargs,
-                )
-                for level in range(levels)
-            ]
-        )
-
-    def forward(self, t, x):
-        res_tensors = None
-        for net in self.nets[::-1]:  # type: ignore
-            res_tensors = net(t, x, res_tensors)
-        assert res_tensors is not None
-        return res_tensors[-1]
