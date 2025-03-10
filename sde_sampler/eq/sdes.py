@@ -173,7 +173,7 @@ class OU(TorchSDE):
 
         where Z ~ N(0, I)
         """
-        mean_factor = self.s(t) - self.s(s)
+        mean_factor = torch.exp(torch.log(self.s(t)) - torch.log(self.s(s)))
         var_factor = self.s(t) ** 2 * (self.sigma_sq(t) - self.sigma_sq(s))
         return mean_factor, var_factor
 
