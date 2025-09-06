@@ -28,7 +28,8 @@ parser.add_argument('--use_full_two_modes', action=argparse.BooleanOptionalActio
 parser.add_argument('--use_mcmc_sampling', action=argparse.BooleanOptionalAction)
 parser.add_argument('--dataset_size', type=int, default=40000)
 parser.add_argument('--n_sampling_seeds', type=int, default=16)
-parser.add_argument('--seed', type=int)
+parser.add_argument('--seed', type=int, default=42)
+parser.add_argument('--device', type=str, default='cpu')
 args = parser.parse_args()
 
 # Check if it is a ref solver
@@ -43,7 +44,7 @@ config = vars(args)
 pprint.pprint(config)
 
 # Make a Pytorch device
-device = torch.device('cuda')
+device = torch.device(args.device)
 
 # Set the seed
 random.seed(args.seed)

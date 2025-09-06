@@ -10,7 +10,7 @@ from sde_sampler.additions.ebm_mle import MaximumLikelihoodEBM, smc_sampler, re_
 from sde_sampler.additions.ks import compute_sliced_ks
 from sde_sampler.additions.mcmc import mala_step, rwmh_step, heuristics_step_size
 from sde_sampler.additions.mmd import mmd_median
-from sde_sampler.additions.perfect_score_mog import nabla_log_pt
+# from sde_sampler.additions.perfect_score_mog import nabla_log_pt
 from sde_sampler.distr.gauss import GMM, GMMFull, Gauss, GaussFull
 from sde_sampler.eval.sinkhorn import Sinkhorn
 from sde_sampler.models.reparam import RemoveReferenceCtrl
@@ -380,7 +380,7 @@ def build_ebm(ebm_type, sde, prior, net, target_acceptance=0.75, use_snr_adapted
                      )
 
 
-def compute_score_mse_ebm_mog(model, is_drl, device, target, means, covs, weights, batch_size=4096):
+"""def compute_score_mse_ebm_mog(model, is_drl, device, target, means, covs, weights, batch_size=4096):
     # Move to device
     model = model.to(device)
     means = means.to(device)
@@ -404,7 +404,7 @@ def compute_score_mse_ebm_mog(model, is_drl, device, target, means, covs, weight
             score_est = model.net(t_, x_t)
         # Compute the MSE
         mses.append(torch.sum(torch.square(score_opt - score_est), dim=-1).mean().cpu().detach())
-    return torch.stack(mses)
+    return torch.stack(mses)"""
 
 
 class ScoreWithReferenceScore(torch.nn.Module):
